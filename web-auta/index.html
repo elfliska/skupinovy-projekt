@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>auta</title>
+
+    <!-- Link Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Link File CSS -->
+    <link rel="stylesheet" href="spolecny.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <img src="sigma.png" class="logo" alt="">
+            <div class="menu">
+                <div class="maly">
+                    
+                <a href="index.html">Hlavní stránka</a>
+                <a href="autori.html">Autoři</a>
+                <a href="registrace.html">Registrace</a>
+                <a href="support.html">Podpora</a>
+
+
+                </div>
+               
+            </div>
+
+            <div class="social">
+                <a href="https://www.facebook.com/BMW/"><i class="fa-brands fa-facebook-f"></i></a>
+                <a href="https://twitter.com/BMW"><i class="fa-brands fa-twitter"></i></a>
+                <a href="https://www.instagram.com/bmw/"><i class="fa-brands fa-instagram"></i></a>
+            </div>
+        </nav>
+    </header>
+    
+    <div class="hero">
+
+        <div class="text">
+            <h4>Výkonný, zábavný a</h4>
+            <h1>divoký při  <br> <span>řízení</span></h1>
+            <p>Skutečný postoj, skutečná síla, skutečný výkon.</p>
+            <a href="book test.html" class="btn">rezervovat zkušební jízdu</a>
+        </div>
+    </div>
+
+    <script>
+        let heroBg = document.querySelector('.hero');
+
+        setInterval(() => {
+            heroBg.style.backgroundImage = "url(img/bg-light.jpg)"
+            
+            setTimeout(() => {
+                heroBg.style.backgroundImage = "url(img/bg.jpg)"
+            }, 1000);
+        }, 2200);
+    </script>
+</body>
+</html>

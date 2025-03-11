@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>přihlášení</title>
+
+    <link rel="stylesheet" href="spolecny.css">
+    <style>
+        /* Styly pro základní strukturu stránky */
+        body {
+            background-color: black; /* Černé pozadí */
+            color: white; /* Bílý text */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0; /* Odstranění výchozích okrajů */
+        }
+        /* Styly pro formulář */
+        form {
+            background-color: #333; /* Tmavě šedé pozadí formuláře */
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+            width: 300px;
+        }
+        /* Styly pro políčka a tlačítka */
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #555; /* Tmavší šedé pozadí políček */
+            color: white; /* Bílý text v políčkách */
+        }
+        input[type="submit"],
+        button {
+            background-color: red; /* Červené tlačítko */
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        /* Efekt po najetí myší na tlačítko */
+        input[type="submit"]:hover,
+        button:hover {
+            background-color: darkred; /* Tmavší červená po najetí myší */
+        }
+        /* Styly pro nadpis */
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: red; /* Červený nadpis */
+        }
+
+        @media screen and (max-width: 620px) {
+            form{
+              width: 100% 
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html">
+    <!-- Přidání loga do levého horního rohu -->
+    <img id="logo" src="sigma.png" alt="Logo" width="50" height="50">
+    </a>
+    <form id="loginForm">
+        <h2>Přihlášení</h2>
+        <label for="email">E-mail:</label>
+        <input type="email" id="email" name="email" required>
+
+        <label for="password">Heslo:</label>
+        <input type="password" id="password" name="password" required>
+
+        <input type="submit" value="Přihlásit se">
+
+        <!-- Tlačítko pro návrat na hlavní stránku -->
+        <button type="button" onclick="window.location.href = 'index.html';">Zpět na hlavní stránku</button>
+
+        <!-- Tlačítko pro přesměrování na registrační stránku -->
+        <button type="button" onclick="window.location.href = 'registrace.html';">Registrovat se</button>
+    </form>
+
+    <script>
+        // Přidání události pro odeslání formuláře
+        document.getElementById('loginForm').addEventListener('submit', function(event) {
+            event.preventPrevent(); // Zabrání odeslání formuláře
+
+            // Získání hodnot z formuláře
+            var email = document.getElementById('email').value;
+            var password = document.getElementById('password').value;
+
+            // Vykonání operací s daty z formuláře (např. odeslání na server)
+            console.log('E-mail:', email);
+            console.log('Heslo:', password);
+
+            // Můžete přidat další kód pro odeslání dat na server nebo jejich zpracování
+        });
+    </script>
+</body>
+</html>

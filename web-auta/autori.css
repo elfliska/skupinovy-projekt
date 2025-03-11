@@ -1,0 +1,66 @@
+body{
+	background-image: url('auto.jpg'); /* Specify the path to your image */
+    background-size: cover; /* Cover the entire background */
+    background-repeat: repeat; /* Do not repeat the background image */
+}
+h1{
+	color: red;
+	font-size: 47px;
+	text-align: center;
+}
+
+h2{
+	color:white;
+}
+
+
+ .back-btn {
+            background-color: red;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 18px;
+            text-decoration: none;
+            display: inline-block;
+            margin-right: 400px;
+            margin-bottom: 10px; /* Add margin-bottom to create space between buttons */
+        }  
+
+
+
+
+
+p{
+	color: white;
+    font-size: 20px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+div{
+	text-align: center;
+}
+.ramecek1{
+	background-color: black;
+      width: 32%; /*sirka*/	
+      padding: 5px; 
+      border: 2px; 
+      margin: 5px; 
+      float: left;
+      
+}
+
+.dolnitext{
+	position: absolute;
+	bottom: 0;
+}
+
+@media screen and (max-width: 620px) {
+  .ramecek1 {
+    width: 100%; 
+
+
