@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong – Klasická hra v Pythonu</title>
+    <style>
+        body {
+            font-family: "Poppins", sans-serif;
+            background: linear-gradient(135deg, #1a1a1a, #222, #111);
+            color: #eee;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+
+        header {
+            text-align: center;
+            padding: 60px 20px;
+            background: radial-gradient(circle, #111 0%, #000 100%);
+            border-bottom: 2px solid #0ff;
+        }
+
+        header h1 {
+            font-size: 3em;
+            color: #0ff;
+            text-shadow: 0 0 10px #0ff;
+        }
+
+        header p {
+            color: #aaa;
+            font-size: 1.2em;
+        }
+
+        main {
+            max-width: 1000px;
+            margin: auto;
+            padding: 40px 20px;
+        }
+
+        section {
+            margin-bottom: 60px;
+        }
+
+        h2 {
+            color: #0ff;
+            border-left: 4px solid #0ff;
+            padding-left: 10px;
+        }
+
+        .screenshot {
+            width: 100%;
+            max-width: 700px;
+            margin: 20px auto;
+            display: block;
+            border: 2px solid #0ff;
+            border-radius: 10px;
+            box-shadow: 0 0 20px #0ff3;
+        }
+
+        pre {
+            background: #111;
+            color: #0f0;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            border: 1px solid #0ff2;
+        }
+
+        code {
+            font-family: "Consolas", monospace;
+            font-size: 0.95em;
+        }
+
+        .features {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            gap: 20px;
+        }
+
+        .feature {
+            background: #181818;
+            border: 1px solid #0ff2;
+            border-radius: 10px;
+            padding: 20px;
+            flex: 1 1 250px;
+            text-align: center;
+            box-shadow: 0 0 10px #0ff2;
+            transition: transform 0.3s ease;
+        }
+
+        .feature:hover {
+            transform: scale(1.05);
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px;
+            background: #000;
+            color: #777;
+            border-top: 1px solid #0ff;
+        }
+
+        a {
+            color: #0ff;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🎮 Pong – Klasická hra v Pythonu</h1>
+        <p>Jednoduchá, legendární a zábavná hra vytvořená pomocí modulu <strong>turtle</strong>.</p>
+    </header>
+
+    <main>
+        <section>
+            <h2>🕹️ Co je Pong?</h2>
+            <p><strong>Pong</strong> je jedna z úplně prvních videoher, která vznikla už v 70. letech. 
+               Hra simuluje stolní tenis – dva hráči ovládají pálky a odrážejí míček. 
+               Cílem je nedovolit, aby míček přešel na tvou stranu obrazovky.</p>
+            <img src="https://upload.wikimedia.org/wikipedia/commons/3/33/Pong.png" alt="Pong Screenshot" class="screenshot">
+        </section>
+
+        <section>
+            <h2>💡 Jak hra funguje</h2>
+            <div class="features">
+                <div class="feature">
+                    <h3>🎯 Cíl hry</h3>
+                    <p>Odrážej míček pomocí své pálky. Když soupeř míček mine, získáváš bod.</p>
+                </div>
+                <div class="feature">
+                    <h3>⌨️ Ovládání</h3>
+                    <p>Hráč A: <strong>W / S</strong><br>Hráč B: <strong>Šipky nahoru / dolů</strong></p>
+                </div>
+                <div class="feature">
+                    <h3>🏆 Skóre</h3>
+                    <p>Body se zobrazují nahoře na obrazovce. Po každém bodu se hra zastaví a čeká na restart.</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>🧩 Ukázka kódu</h2>
+            <p>Základní princip hry je jednoduchý – míček se pohybuje a odráží od stěn a pálek. 
+               Následující ukázka ukazuje, jak se míček pohybuje:</p>
+
+<pre><code># Pohyb míčku
+ball.setx(ball.xcor() + ball.dx)
+ball.sety(ball.ycor() + ball.dy)
+
+# Odrážení od horní a dolní hrany
+if ball.ycor() > 290 or ball.ycor() < -290:
+    ball.dy *= -1
+</code></pre>
+        </section>
+
+        <section>
+            <h2>🚀 Jak hru spustit</h2>
+            <ol>
+                <li>Nainstaluj si Python (3.10 nebo novější).</li>
+                <li>Otevři editor (např. <strong>PyCharm</strong>).</li>
+                <li>Zkopíruj celý kód hry Pong.</li>
+                <li>Ulož jako <code>pong.py</code> a spusť.</li>
+            </ol>
+        </section>
+
+        <section>
+            <h2>🌟 Zajímavosti</h2>
+            <ul>
+                <li>Pong byl inspirován stolním tenisem.</li>
+                <li>První komerční úspěch měl v roce 1972 (Atari).</li>
+                <li>Dnes existují stovky verzí – od retro po 3D varianty.</li>
+            </ul>
+        </section>
+    </main>
+
+    <footer>
+        <p>© 2025 Pong Project | Vytvořeno pomocí HTML, CSS a Pythonu 🐍</p>
+        <p><a href="https://github.com/" target="_blank">Zobraz projekt na GitHubu</a></p>
+    </footer>
+</body>
+</html>
