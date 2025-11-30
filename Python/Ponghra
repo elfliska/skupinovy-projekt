@@ -1,197 +1,421 @@
 import pygame
+import time
+from database import save_score, get_top_scores
 
 pygame.init()
 
-# Font that is used to render the text
+# Fonty
 font20 = pygame.font.Font('freesansbold.ttf', 20)
+font_large = pygame.font.Font('freesansbold.ttf', 50)
+font_medium = pygame.font.Font('freesansbold.ttf', 30)
+font_small = pygame.font.Font('freesansbold.ttf', 24)
 
-# RGB values of standard colors
+# Barvy
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 GREEN = (0, 255, 0)
+COLOR_BG = (20, 20, 20)
 
-# Basic parameters of the screen
+# Screen - CHANGED: Added top bar for menu buttons
 WIDTH, HEIGHT = 900, 600
+TOP_BAR_HEIGHT = 60  # NEW: Height of the top menu bar
+GAME_HEIGHT = HEIGHT - TOP_BAR_HEIGHT  # NEW: Actual gameplay area height
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Pong")
 
 clock = pygame.time.Clock()
 FPS = 60
 
-# Striker class
 
-
+# -------------------------------------------------------------
+# STRIKER - UPDATED: Now respects the gameplay area boundaries
+# -------------------------------------------------------------
 class Striker:
-        # Take the initial position, dimensions, speed and color of the object
     def __init__(self, posx, posy, width, height, speed, color):
         self.posx = posx
-        self.posy = posy
+        self.posy = posy + TOP_BAR_HEIGHT  # CHANGED: Offset by top bar
         self.width = width
         self.height = height
         self.speed = speed
         self.color = color
-        # Rect that is used to control the position and collision of the object
-        self.geekRect = pygame.Rect(posx, posy, width, height)
-        # Object that is blit on the screen
-        self.geek = pygame.draw.rect(screen, self.color, self.geekRect)
+        self.geekRect = pygame.Rect(posx, self.posy, width, height)
 
-    # Used to display the object on the screen
     def display(self):
-        self.geek = pygame.draw.rect(screen, self.color, self.geekRect)
+        pygame.draw.rect(screen, self.color, self.geekRect)
 
     def update(self, yFac):
-        self.posy = self.posy + self.speed*yFac
-
-        # Restricting the striker to be below the top surface of the screen
-        if self.posy <= 0:
-            self.posy = 0
-        # Restricting the striker to be above the bottom surface of the screen
-        elif self.posy + self.height >= HEIGHT:
-            self.posy = HEIGHT-self.height
-
-        # Updating the rect with the new values
-        self.geekRect = (self.posx, self.posy, self.width, self.height)
-
-    def displayScore(self, text, score, x, y, color):
-        text = font20.render(text+str(score), True, color)
-        textRect = text.get_rect()
-        textRect.center = (x, y)
-
-        screen.blit(text, textRect)
+        self.posy += self.speed * yFac
+        # CHANGED: Boundaries now respect top bar and bottom status bar
+        if self.posy <= TOP_BAR_HEIGHT:
+            self.posy = TOP_BAR_HEIGHT
+        elif self.posy + self.height >= HEIGHT - 50:  # 50 is status bar height
+            self.posy = HEIGHT - 50 - self.height
+        self.geekRect = pygame.Rect(self.posx, self.posy, self.width, self.height)
 
     def getRect(self):
         return self.geekRect
 
-# Ball class
 
-
+# -------------------------------------------------------------
+# BALL - UPDATED: Speed increases on bounce, bug fixes
+# -------------------------------------------------------------
 class Ball:
     def __init__(self, posx, posy, radius, speed, color):
         self.posx = posx
-        self.posy = posy
+        self.posy = posy + TOP_BAR_HEIGHT  # CHANGED: Offset by top bar
         self.radius = radius
         self.speed = speed
+        self.initial_speed = speed  # NEW: Store initial speed for reset
         self.color = color
         self.xFac = 1
         self.yFac = -1
-        self.ball = pygame.draw.circle(
-            screen, self.color, (self.posx, self.posy), self.radius)
         self.firstTime = 1
+        self.last_hit_time = 0  # NEW: Prevent multiple hits in short time
 
     def display(self):
-        self.ball = pygame.draw.circle(
-            screen, self.color, (self.posx, self.posy), self.radius)
+        pygame.draw.circle(screen, self.color, (self.posx, self.posy), self.radius)
 
     def update(self):
-        self.posx += self.speed*self.xFac
-        self.posy += self.speed*self.yFac
+        self.posx += self.speed * self.xFac
+        self.posy += self.speed * self.yFac
 
-        # If the ball hits the top or bottom surfaces,
-        # then the sign of yFac is changed and
-        # it results in a reflection
-        if self.posy <= 0 or self.posy >= HEIGHT:
+        # CHANGED: Fixed bounds - now respects top bar and status bar
+        if self.posy - self.radius <= TOP_BAR_HEIGHT or self.posy + self.radius >= HEIGHT - 50:
             self.yFac *= -1
+            # ADDED: Clamp ball position to prevent it from going out of bounds
+            if self.posy - self.radius < TOP_BAR_HEIGHT:
+                self.posy = TOP_BAR_HEIGHT + self.radius
+            if self.posy + self.radius > HEIGHT - 50:
+                self.posy = HEIGHT - 50 - self.radius
 
+        # Score detection
         if self.posx <= 0 and self.firstTime:
             self.firstTime = 0
             return 1
         elif self.posx >= WIDTH and self.firstTime:
             self.firstTime = 0
             return -1
-        else:
-            return 0
+        return 0
 
     def reset(self):
-        self.posx = WIDTH//2
-        self.posy = HEIGHT//2
+        self.posx = WIDTH // 2
+        self.posy = (HEIGHT - 50 + TOP_BAR_HEIGHT) // 2  # CHANGED: Center in gameplay area
         self.xFac *= -1
         self.firstTime = 1
+        self.speed = self.initial_speed  # NEW: Reset speed to initial value
+        self.last_hit_time = 0  # NEW: Reset hit cooldown
 
-    # Used to reflect the ball along the X-axis
     def hit(self):
+        current_time = time.time()
+        # NEW: Prevent multiple hits within 0.1 seconds (fixes ball getting stuck in paddle)
+        if current_time - self.last_hit_time < 0.1:
+            return
+
         self.xFac *= -1
+        self.speed += 0.5  # NEW: Increase speed by 0.5 each bounce
+        if self.speed > 15:  # NEW: Cap maximum speed at 15
+            self.speed = 15
+        self.last_hit_time = current_time  # NEW: Update last hit time
 
     def getRect(self):
-        return self.ball
-
-# Game Manager
+        return pygame.Rect(self.posx - self.radius, self.posy - self.radius, self.radius * 2, self.radius * 2)
 
 
-def main():
-    running = True
+# -------------------------------------------------------------
+# MENU - UPDATED: Shows warning when name is empty
+# -------------------------------------------------------------
+def menu():
+    player_name = ""
+    input_active = False
+    mode = "PVP"
 
-    # Defining the objects
-    geek1 = Striker(20, 0, 10, 100, 10, GREEN)
-    geek2 = Striker(WIDTH-30, 0, 10, 100, 10, GREEN)
-    ball = Ball(WIDTH//2, HEIGHT//2, 7, 7, WHITE)
+    COLOR_ACTIVE = (0, 200, 0)
+    COLOR_PASSIVE = (180, 180, 180)
+    COLOR_BUTTON = (60, 60, 60)
+    COLOR_BUTTON_HOVER = (100, 100, 100)
 
-    listOfGeeks = [geek1, geek2]
+    while True:
+        screen.fill(COLOR_BG)
+        title = font_large.render("PONG", True, WHITE)
+        screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 40))
 
-    # Initial parameters of the players
-    geek1Score, geek2Score = 0, 0
-    geek1YFac, geek2YFac = 0, 0
+        # NEW: Instructions for the user
+        if player_name == "":
+            instruction = font_small.render("⚠ Prosím zadejte své jméno pro start hry", True, (255, 200, 0))
+            screen.blit(instruction, (WIDTH // 2 - instruction.get_width() // 2, 110))
 
-    while running:
-        screen.fill(BLACK)
+        # Input box
+        label = font_small.render("Jméno hráče:", True, WHITE)
+        screen.blit(label, (WIDTH // 2 - 150, 150))
+        input_rect = pygame.Rect(WIDTH // 2 - 150, 190, 300, 45)
+        pygame.draw.rect(screen, COLOR_ACTIVE if input_active else COLOR_PASSIVE, input_rect, border_radius=6)
+        name_text = font_small.render(player_name, True, WHITE)
+        screen.blit(name_text, (input_rect.x + 10, input_rect.y + 10))
 
-        # Event handling
+        # Mode buttons
+        mode_label = font_small.render("Režim hry:", True, WHITE)
+        screen.blit(mode_label, (WIDTH // 2 - 150, 260))
+        pvp_button = pygame.Rect(WIDTH // 2 - 150, 300, 300, 40)
+        bot_button = pygame.Rect(WIDTH // 2 - 150, 350, 300, 40)
+        pygame.draw.rect(screen, COLOR_BUTTON_HOVER if mode == "PVP" else COLOR_BUTTON, pvp_button, border_radius=6)
+        pygame.draw.rect(screen, COLOR_BUTTON_HOVER if mode == "BOT" else COLOR_BUTTON, bot_button, border_radius=6)
+        screen.blit(font_small.render("Hráč vs Hráč", True, WHITE), (pvp_button.x + 80, pvp_button.y + 8))
+        screen.blit(font_small.render("Hráč vs Bot", True, WHITE), (bot_button.x + 95, bot_button.y + 8))
+
+        # Start button
+        start_button = pygame.Rect(WIDTH // 2 - 100, 430, 200, 50)
+        mouse = pygame.mouse.get_pos()
+        # NEW: Button is grayed out if no name entered
+        if player_name == "":
+            pygame.draw.rect(screen, (50, 50, 50), start_button, border_radius=8)
+            screen.blit(font_medium.render("START", True, (120, 120, 120)), (start_button.x + 45, start_button.y + 5))
+        else:
+            pygame.draw.rect(screen, (0, 150, 0) if start_button.collidepoint(mouse) else (0, 110, 0), start_button,
+                             border_radius=8)
+            screen.blit(font_medium.render("START", True, WHITE), (start_button.x + 45, start_button.y + 5))
+
+        # Quit button
+        quit_button = pygame.Rect(WIDTH // 2 - 100, 500, 200, 50)
+        pygame.draw.rect(screen, (180, 0, 0) if quit_button.collidepoint(mouse) else (140, 0, 0), quit_button,
+                         border_radius=8)
+        screen.blit(font_medium.render("UKONČIT", True, WHITE), (quit_button.x + 18, quit_button.y + 5))
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                pygame.quit()
+                quit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if input_rect.collidepoint(event.pos):
+                    input_active = True
+                else:
+                    input_active = False
+
+                if pvp_button.collidepoint(event.pos):
+                    mode = "PVP"
+                if bot_button.collidepoint(event.pos):
+                    mode = "BOT"
+                if start_button.collidepoint(event.pos) and player_name != "":
+                    return mode, player_name
+                if quit_button.collidepoint(event.pos):
+                    pygame.quit()
+                    quit()
+
+            if event.type == pygame.KEYDOWN and input_active:
+                if event.key == pygame.K_BACKSPACE:
+                    player_name = player_name[:-1]
+                elif len(player_name) < 12:
+                    player_name += event.unicode
+
+        pygame.display.update()
+
+
+# -------------------------------------------------------------
+# PAUSE SCREEN - UNCHANGED but now properly stops gameplay
+# -------------------------------------------------------------
+def pause_screen():
+    paused = True
+
+    continue_btn = pygame.Rect(WIDTH // 2 - 120, HEIGHT // 2 - 40, 240, 50)
+    menu_btn = pygame.Rect(WIDTH // 2 - 120, HEIGHT // 2 + 20, 240, 50)
+    quit_btn = pygame.Rect(WIDTH // 2 - 120, HEIGHT // 2 + 80, 240, 50)
+
+    while paused:
+        screen.fill(BLACK)
+        overlay = font_large.render("PAUZA", True, WHITE)
+        screen.blit(overlay, (WIDTH // 2 - overlay.get_width() // 2, HEIGHT // 2 - 130))
+
+        mouse = pygame.mouse.get_pos()
+
+        pygame.draw.rect(screen, (70, 110, 70) if continue_btn.collidepoint(mouse) else (40, 90, 40), continue_btn,
+                         border_radius=8)
+        pygame.draw.rect(screen, (70, 70, 120) if menu_btn.collidepoint(mouse) else (40, 40, 90), menu_btn,
+                         border_radius=8)
+        pygame.draw.rect(screen, (160, 0, 0) if quit_btn.collidepoint(mouse) else (110, 0, 0), quit_btn,
+                         border_radius=8)
+
+        screen.blit(font_medium.render("POKRAČOVAT", True, WHITE), (continue_btn.x + 20, continue_btn.y + 8))
+        screen.blit(font_medium.render("MENU", True, WHITE), (menu_btn.x + 75, menu_btn.y + 8))
+        screen.blit(font_medium.render("UKONČIT", True, WHITE), (quit_btn.x + 60, quit_btn.y + 8))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if continue_btn.collidepoint(event.pos):
+                    return "continue"
+                if menu_btn.collidepoint(event.pos):
+                    return "menu"
+                if quit_btn.collidepoint(event.pos):
+                    pygame.quit()
+                    quit()
+
+        pygame.display.update()
+        clock.tick(30)
+
+
+# -------------------------------------------------------------
+# MAIN GAME - UPDATED: Menu buttons moved to top bar + better key handling
+# -------------------------------------------------------------
+def main(mode, player_name):
+    # CHANGED: Initial positions now account for top bar
+    geek1 = Striker(20, 0, 10, 100, 10, GREEN)
+    geek2 = Striker(WIDTH - 30, 0, 10, 100, 10, GREEN)
+    ball = Ball(WIDTH // 2, (GAME_HEIGHT - 50) // 2, 7, 7, WHITE)
+
+    geek1Score = 0
+    geek2Score = 0
+    geek1YFac = 0
+    geek2YFac = 0
+
+    # NEW: Track pressed keys for better multi-key handling (fixes 2-finger problem)
+    geek1_keys = {'w': False, 's': False}
+    geek2_keys = {'up': False, 'down': False}
+
+    # NEW: Menu buttons now in top bar - won't overlay gameplay
+    pause_button = pygame.Rect(WIDTH // 2 - 60, 10, 120, 40)
+    menu_button = pygame.Rect(20, 10, 90, 40)
+    quit_button = pygame.Rect(WIDTH - 110, 10, 90, 40)
+
+    running = True
+    while running:
+        screen.fill(BLACK)
+        mouse = pygame.mouse.get_pos()
+
+        # NEW: Draw top bar background
+        pygame.draw.rect(screen, (30, 30, 30), (0, 0, WIDTH, TOP_BAR_HEIGHT))
+        pygame.draw.line(screen, (60, 60, 60), (0, TOP_BAR_HEIGHT), (WIDTH, TOP_BAR_HEIGHT), 2)
+
+        # CHANGED: Buttons now in top bar with better positioning
+        pygame.draw.rect(screen, (60, 60, 60) if not menu_button.collidepoint(mouse) else (100, 100, 100), menu_button,
+                         border_radius=6)
+        pygame.draw.rect(screen, (80, 80, 150) if not pause_button.collidepoint(mouse) else (120, 120, 200),
+                         pause_button, border_radius=6)
+        pygame.draw.rect(screen, (140, 0, 0) if not quit_button.collidepoint(mouse) else (180, 0, 0), quit_button,
+                         border_radius=6)
+
+        screen.blit(font_small.render("MENU", True, WHITE), (menu_button.x + 12, menu_button.y + 10))
+        screen.blit(font_small.render("PAUZA", True, WHITE), (pause_button.x + 25, pause_button.y + 10))
+        screen.blit(font_small.render("QUIT", True, WHITE), (quit_button.x + 18, quit_button.y + 10))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if menu_button.collidepoint(event.pos):
+                    return
+                if quit_button.collidepoint(event.pos):
+                    pygame.quit()
+                    quit()
+                if pause_button.collidepoint(event.pos):
+                    result = pause_screen()
+                    if result == "menu":
+                        return
+
+            # Controls - NEW: Better key tracking for simultaneous presses
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP:
-                    geek2YFac = -1
-                if event.key == pygame.K_DOWN:
-                    geek2YFac = 1
                 if event.key == pygame.K_w:
-                    geek1YFac = -1
+                    geek1_keys['w'] = True
                 if event.key == pygame.K_s:
-                    geek1YFac = 1
+                    geek1_keys['s'] = True
+                # ADDED: ESC key to pause
+                if event.key == pygame.K_ESCAPE:
+                    result = pause_screen()
+                    if result == "menu":
+                        return
+
+                if mode == "PVP":
+                    if event.key == pygame.K_UP:
+                        geek2_keys['up'] = True
+                    if event.key == pygame.K_DOWN:
+                        geek2_keys['down'] = True
+
             if event.type == pygame.KEYUP:
-                if event.key == pygame.K_UP or event.key == pygame.K_DOWN:
-                    geek2YFac = 0
-                if event.key == pygame.K_w or event.key == pygame.K_s:
-                    geek1YFac = 0
+                if event.key == pygame.K_w:
+                    geek1_keys['w'] = False
+                if event.key == pygame.K_s:
+                    geek1_keys['s'] = False
+                if mode == "PVP":
+                    if event.key == pygame.K_UP:
+                        geek2_keys['up'] = False
+                    if event.key == pygame.K_DOWN:
+                        geek2_keys['down'] = False
 
-        # Collision detection
-        for geek in listOfGeeks:
-            if pygame.Rect.colliderect(ball.getRect(), geek.getRect()):
-                ball.hit()
+        # NEW: Calculate movement based on currently pressed keys
+        # This allows simultaneous key presses to work properly (2-finger fix)
+        if geek1_keys['w'] and not geek1_keys['s']:
+            geek1YFac = -1
+        elif geek1_keys['s'] and not geek1_keys['w']:
+            geek1YFac = 1
+        else:
+            geek1YFac = 0  # Both pressed or neither pressed = no movement
 
-        # Updating the objects
+        if mode == "PVP":
+            if geek2_keys['up'] and not geek2_keys['down']:
+                geek2YFac = -1
+            elif geek2_keys['down'] and not geek2_keys['up']:
+                geek2YFac = 1
+            else:
+                geek2YFac = 0
+
+        # BOT - UNCHANGED
+        if mode == "BOT":
+            if ball.posy < geek2.posy + geek2.height // 2:
+                geek2YFac = -1
+            elif ball.posy > geek2.posy + geek2.height // 2:
+                geek2YFac = 1
+            else:
+                geek2YFac = 0
+
+        # Collision
+        if ball.getRect().colliderect(geek1.getRect()): ball.hit()
+        if ball.getRect().colliderect(geek2.getRect()): ball.hit()
+
+        # Update
         geek1.update(geek1YFac)
         geek2.update(geek2YFac)
         point = ball.update()
 
-        # -1 -> Geek_1 has scored
-        # +1 -> Geek_2 has scored
-        #  0 -> None of them scored
         if point == -1:
             geek1Score += 1
         elif point == 1:
             geek2Score += 1
-
-        # Someone has scored
-        # a point and the ball is out of bounds.
-        # So, we reset it's position
         if point:
             ball.reset()
 
-        # Displaying the objects on the screen
+        # Draw - gameplay elements stay in their area
         geek1.display()
         geek2.display()
         ball.display()
 
-        # Displaying the scores of the players
-        geek1.displayScore("Geek_1 : ",
-                           geek1Score, 100, 20, WHITE)
-        geek2.displayScore("Geek_2 : ",
-                           geek2Score, WIDTH-100, 20, WHITE)
+        # Status bar at bottom - UNCHANGED
+        pygame.draw.rect(screen, (25, 25, 25), (0, HEIGHT - 50, WIDTH, 50))
+        pygame.draw.line(screen, (60, 60, 60), (0, HEIGHT - 50), (WIDTH, HEIGHT - 50), 2)
+        screen.blit(font_small.render(f"{player_name}: {geek1Score}", True, WHITE), (20, HEIGHT - 35))
+        screen.blit(font_small.render(f"GEEK_2: {geek2Score}", True, WHITE), (WIDTH - 150, HEIGHT - 35))
 
         pygame.display.update()
         clock.tick(FPS)
 
 
+# -------------------------------------------------------------
+# TOP SCORES - UNCHANGED
+# -------------------------------------------------------------
+def display_top_scores():
+    top = get_top_scores()
+    print("=== TOP 5 SKÓRE ===")
+    for i, (player, score) in enumerate(top, 1):
+        print(f"{i}. {player}: {score}")
+
+
+# -------------------------------------------------------------
+# RUN - UNCHANGED
+# -------------------------------------------------------------
 if __name__ == "__main__":
-    main()
-    pygame.quit()
+    while True:
+        mode, player_name = menu()
+        main(mode, player_name)
