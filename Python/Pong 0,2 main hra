@@ -1,0 +1,427 @@
+# ===================================================================
+# PONG HRA - Kompletní vysvětlení pro začátečníky
+# ===================================================================
+from db.models import get_connection, create_tables  # ✅ SPRÁVNĚ
+import pygame  # Knihovna pro tvorbu her
+import time  # Knihovna pro měření času
+
+pygame.init()  # Spuštění pygame
+
+# -------------------------------------------------------------------
+# FONTY - různé velikosti textu
+# -------------------------------------------------------------------
+font_large = pygame.font.Font('freesansbold.ttf', 50)  # Velký font
+font_medium = pygame.font.Font('freesansbold.ttf', 30)  # Střední font
+font_small = pygame.font.Font('freesansbold.ttf', 24)  # Malý font
+
+# -------------------------------------------------------------------
+# BARVY - RGB formát (Red, Green, Blue)
+# -------------------------------------------------------------------
+BLACK = (0, 0, 0)  # Černá
+WHITE = (255, 255, 255)  # Bílá
+GREEN = (0, 255, 0)  # Zelená
+COLOR_BG = (20, 20, 20)  # Tmavě šedá
+
+# -------------------------------------------------------------------
+# OBRAZOVKA
+# -------------------------------------------------------------------
+WIDTH = 900  # Šířka okna
+HEIGHT = 600  # Výška okna
+TOP_BAR_HEIGHT = 60  # Výška horní lišty
+screen = pygame.display.set_mode((WIDTH, HEIGHT))  # Vytvoření okna
+pygame.display.set_caption("Pong")  # Název okna
+
+clock = pygame.time.Clock()  # Hodiny pro FPS
+FPS = 60  # 60 snímků za sekundu
+
+
+# ===================================================================
+# TŘÍDA STRIKER - Pálka hráče
+# ===================================================================
+class Striker:
+    def __init__(self, posx, posy, width, height, speed, color):
+        self.posx = posx  # X pozice
+        self.posy = posy + TOP_BAR_HEIGHT  # Y pozice (posunutá kvůli horní liště)
+        self.width = width  # Šířka pálky
+        self.height = height  # Výška pálky
+        self.speed = speed  # Rychlost pohybu
+        self.color = color  # Barva pálky
+        self.geekRect = pygame.Rect(posx, self.posy, width, height)  # Obdélník pro kolize
+
+    def display(self):  # Vykreslení pálky
+        pygame.draw.rect(screen, self.color, self.geekRect)
+
+    def update(self, yFac):  # Aktualizace pozice
+        self.posy += self.speed * yFac  # Pohyb nahoru/dolů
+
+        if self.posy <= TOP_BAR_HEIGHT:  # Kontrola horní hranice
+            self.posy = TOP_BAR_HEIGHT
+        elif self.posy + self.height >= HEIGHT - 50:  # Kontrola dolní hranice
+            self.posy = HEIGHT - 50 - self.height
+
+        self.geekRect = pygame.Rect(self.posx, self.posy, self.width, self.height)  # Aktualizace obdélníku
+
+    def getRect(self):  # Vrátí obdélník pálky
+        return self.geekRect
+
+
+# ===================================================================
+# TŘÍDA BALL - Míček
+# ===================================================================
+class Ball:
+    def __init__(self, posx, posy, radius, speed, color):
+        self.posx = posx  # X pozice
+        self.posy = posy + TOP_BAR_HEIGHT  # Y pozice
+        self.radius = radius  # Poloměr míčku
+        self.speed = speed  # Rychlost míčku
+        self.initial_speed = speed  # Původní rychlost (pro reset)
+        self.color = color  # Barva míčku
+        self.xFac = 1  # Směr X (1 = doprava, -1 = doleva)
+        self.yFac = -1  # Směr Y (1 = dolů, -1 = nahoru)
+        self.firstTime = 1  # Pro detekci skóre
+        self.last_hit_time = 0  # Čas posledního nárazu (proti bugům)
+
+    def display(self):  # Vykreslení míčku
+        pygame.draw.circle(screen, self.color, (self.posx, self.posy), self.radius)
+
+    def update(self):  # Aktualizace pozice míčku
+        self.posx += self.speed * self.xFac  # Pohyb v ose X
+        self.posy += self.speed * self.yFac  # Pohyb v ose Y
+
+        # Odraz od horní a dolní hranice
+        if self.posy - self.radius <= TOP_BAR_HEIGHT or self.posy + self.radius >= HEIGHT - 50:
+            self.yFac *= -1  # Obrácení směru Y
+
+            # Oprava pozice aby míček nezmizel
+            if self.posy - self.radius < TOP_BAR_HEIGHT:
+                self.posy = TOP_BAR_HEIGHT + self.radius
+            if self.posy + self.radius > HEIGHT - 50:
+                self.posy = HEIGHT - 50 - self.radius
+
+        # Detekce skóre (míček vyjel z obrazovky)
+        if self.posx <= 0 and self.firstTime:  # Levý hráč dal gól
+            self.firstTime = 0
+            return 1
+        elif self.posx >= WIDTH and self.firstTime:  # Pravý hráč dal gól
+            self.firstTime = 0
+            return -1
+        return 0  # Žádný gól
+
+    def reset(self):  # Reset míčku po gólu
+        self.posx = WIDTH // 2  # Střed obrazovky X
+        self.posy = (HEIGHT - 50 + TOP_BAR_HEIGHT) // 2  # Střed obrazovky Y
+        self.xFac *= -1  # Změna směru
+        self.firstTime = 1  # Reset detekce skóre
+        self.speed = self.initial_speed  # Reset rychlosti
+        self.last_hit_time = 0  # Reset času nárazu
+
+    def hit(self):  # Když míček narazí na pálku
+        current_time = time.time()  # Aktuální čas
+
+        # Prevence duplikátních nárazů (fix bugu)
+        if current_time - self.last_hit_time < 0.1:
+            return
+
+        self.xFac *= -1  # Obrácení směru X
+        self.speed += 0.5  # Zrychlení míčku
+        if self.speed > 15:  # Maximum rychlosti
+            self.speed = 15
+        self.last_hit_time = current_time  # Uložení času nárazu
+
+    def getRect(self):  # Vrátí obdélník míčku
+        return pygame.Rect(self.posx - self.radius, self.posy - self.radius,
+                           self.radius * 2, self.radius * 2)
+
+
+# ===================================================================
+# FUNKCE MENU - Hlavní menu hry
+# ===================================================================
+def menu():
+    player_name = ""  # Jméno hráče
+    input_active = False  # Je input box aktivní?
+    mode = "PVP"  # Režim hry (PVP nebo BOT)
+
+    # Barvy pro input box
+    COLOR_ACTIVE = (0, 200, 0)  # Zelená když je aktivní
+    COLOR_PASSIVE = (180, 180, 180)  # Šedá když není aktivní
+    COLOR_BUTTON = (60, 60, 60)  # Tmavě šedá tlačítko
+    COLOR_BUTTON_HOVER = (100, 100, 100)  # Světlejší při najetí myší
+
+    while True:  # Nekonečná smyčka menu
+        screen.fill(COLOR_BG)  # Vyplnění pozadí
+
+        # Nadpis PONG
+        title = font_large.render("PONG", True, WHITE)
+        screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 40))
+
+        # Varování pokud není jméno
+        if player_name == "":
+            instruction = font_small.render("Prosím zadejte své jméno pro start hry", True, (255, 200, 0))
+            screen.blit(instruction, (WIDTH // 2 - instruction.get_width() // 2, 110))
+
+        # Label "Jméno hráče"
+        label = font_small.render("Jméno hráče:", True, WHITE)
+        screen.blit(label, (WIDTH // 2 - 150, 150))
+
+        # Input box pro jméno
+        input_rect = pygame.Rect(WIDTH // 2 - 150, 190, 300, 45)
+        pygame.draw.rect(screen, COLOR_ACTIVE if input_active else COLOR_PASSIVE, input_rect, border_radius=6)
+        name_text = font_small.render(player_name, True, WHITE)
+        screen.blit(name_text, (input_rect.x + 10, input_rect.y + 10))
+
+        # Label "Režim hry"
+        mode_label = font_small.render("Režim hry:", True, WHITE)
+        screen.blit(mode_label, (WIDTH // 2 - 150, 260))
+
+        # Tlačítko PVP
+        pvp_button = pygame.Rect(WIDTH // 2 - 150, 300, 300, 40)
+        pygame.draw.rect(screen, COLOR_BUTTON_HOVER if mode == "PVP" else COLOR_BUTTON, pvp_button, border_radius=6)
+        screen.blit(font_small.render("Hráč vs Hráč", True, WHITE), (pvp_button.x + 80, pvp_button.y + 8))
+
+        # Tlačítko BOT
+        bot_button = pygame.Rect(WIDTH // 2 - 150, 350, 300, 40)
+        pygame.draw.rect(screen, COLOR_BUTTON_HOVER if mode == "BOT" else COLOR_BUTTON, bot_button, border_radius=6)
+        screen.blit(font_small.render("Hráč vs Bot", True, WHITE), (bot_button.x + 95, bot_button.y + 8))
+
+        # Tlačítko START
+        start_button = pygame.Rect(WIDTH // 2 - 100, 430, 200, 50)
+        mouse = pygame.mouse.get_pos()  # Pozice myši
+
+        # Šedé tlačítko pokud není jméno
+        if player_name == "":
+            pygame.draw.rect(screen, (50, 50, 50), start_button, border_radius=8)
+            screen.blit(font_medium.render("START", True, (120, 120, 120)), (start_button.x + 45, start_button.y + 5))
+        else:  # Zelené tlačítko pokud je jméno
+            pygame.draw.rect(screen, (0, 150, 0) if start_button.collidepoint(mouse) else (0, 110, 0), start_button,
+                             border_radius=8)
+            screen.blit(font_medium.render("START", True, WHITE), (start_button.x + 45, start_button.y + 5))
+
+        # Tlačítko UKONČIT
+        quit_button = pygame.Rect(WIDTH // 2 - 100, 500, 200, 50)
+        pygame.draw.rect(screen, (180, 0, 0) if quit_button.collidepoint(mouse) else (140, 0, 0), quit_button,
+                         border_radius=8)
+        screen.blit(font_medium.render("UKONČIT", True, WHITE), (quit_button.x + 18, quit_button.y + 5))
+
+        # Zpracování událostí
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:  # Křížek na okně
+                pygame.quit()
+                quit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:  # Kliknutí myší
+                if input_rect.collidepoint(event.pos):  # Klik na input box
+                    input_active = True
+                else:
+                    input_active = False
+
+                if pvp_button.collidepoint(event.pos):  # Klik na PVP
+                    mode = "PVP"
+                if bot_button.collidepoint(event.pos):  # Klik na BOT
+                    mode = "BOT"
+                if start_button.collidepoint(event.pos) and player_name != "":  # Klik na START
+                    return mode, player_name
+                if quit_button.collidepoint(event.pos):  # Klik na UKONČIT
+                    pygame.quit()
+                    quit()
+
+            if event.type == pygame.KEYDOWN and input_active:  # Psaní do input boxu
+                if event.key == pygame.K_BACKSPACE:  # Backspace smaže znak
+                    player_name = player_name[:-1]
+                elif len(player_name) < 12:  # Max 12 znaků
+                    player_name += event.unicode
+
+        pygame.display.update()  # Aktualizace obrazovky
+
+
+# ===================================================================
+# FUNKCE SAVE_RESULT - Uložení výsledku do databáze
+# ===================================================================
+def save_result(username, points, hits, game_mode, duration):
+    """Uloží výsledek hry do databáze"""
+    conn = get_connection()
+    cur = conn.cursor()
+
+    # Vlož nebo ignoruj hráče (pokud už existuje)
+    cur.execute(
+        "INSERT OR IGNORE INTO player (username) VALUES (?)",
+        (username,)
+    )
+
+    # Získej ID hráče
+    cur.execute(
+        "SELECT player_id FROM player WHERE username = ?",
+        (username,)
+    )
+    player_id = cur.fetchone()[0]
+
+    # Vlož hru
+    cur.execute("""
+        INSERT INTO game (game_mode, player1_id, duration_seconds)
+        VALUES (?, ?, ?)
+    """, (game_mode, player_id, duration))
+
+    game_id = cur.lastrowid
+
+    # Vlož skóre
+    cur.execute("""
+        INSERT INTO score (points, hits, player_id, game_id)
+        VALUES (?, ?, ?, ?)
+    """, (points, hits, player_id, game_id))
+
+    conn.commit()
+    conn.close()
+    print(f"✅ Výsledek uložen: {username} - {points} bodů, {hits} hitů")
+
+
+# ===================================================================
+# FUNKCE MAIN - Hlavní herní smyčka
+# ===================================================================
+def main(mode, player_name):
+    # Vytvoření hráčů a míčku
+    geek1 = Striker(20, 0, 10, 100, 10, GREEN)  # Levá pálka
+    geek2 = Striker(WIDTH - 30, 0, 10, 100, 10, GREEN)  # Pravá pálka
+    ball = Ball(WIDTH // 2, (HEIGHT - TOP_BAR_HEIGHT - 50) // 2, 7, 7, WHITE)  # Míček
+
+    geek1Score = 0  # Skóre hráče 1
+    geek2Score = 0  # Skóre hráče 2
+    geek1Hits = 0  # Počet hitů hráče 1
+
+    start_time = time.time()  # Začátek hry
+
+    # Sledování stisknutých kláves (fix pro 2 prsty)
+    geek1_keys = {'w': False, 's': False}
+    geek2_keys = {'up': False, 'down': False}
+
+    # Tlačítko PAUZA uprostřed horní lišty
+    pause_button = pygame.Rect(WIDTH // 2 - 60, 10, 120, 40)
+
+    paused = False  # Je hra pozastavená?
+    running = True  # Běží hra?
+
+    while running:  # Hlavní herní smyčka
+        screen.fill(BLACK)  # Černé pozadí
+        mouse = pygame.mouse.get_pos()  # Pozice myši
+
+        # Vykreslení horní lišty
+        pygame.draw.rect(screen, (30, 30, 30), (0, 0, WIDTH, TOP_BAR_HEIGHT))
+        pygame.draw.line(screen, (60, 60, 60), (0, TOP_BAR_HEIGHT), (WIDTH, TOP_BAR_HEIGHT), 2)
+
+        # Tlačítko PAUZA
+        pygame.draw.rect(screen, (80, 80, 150) if pause_button.collidepoint(mouse) else (50, 50, 100), pause_button,
+                         border_radius=6)
+        screen.blit(font_small.render("PAUZA", True, WHITE), (pause_button.x + 25, pause_button.y + 10))
+
+        # Zpracování událostí
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:  # Křížek na okně
+                # Uložení výsledku před ukončením
+                duration = int(time.time() - start_time)
+                save_result(player_name, geek1Score, geek1Hits, mode, duration)
+                pygame.quit()
+                quit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:  # Kliknutí myší
+                if pause_button.collidepoint(event.pos):  # Klik na PAUZA
+                    paused = not paused  # Přepnutí pauzy
+
+            if event.type == pygame.KEYDOWN:  # Stisknutí klávesy
+                if event.key == pygame.K_w:
+                    geek1_keys['w'] = True
+                if event.key == pygame.K_s:
+                    geek1_keys['s'] = True
+                if event.key == pygame.K_ESCAPE:  # ESC pro pauzu
+                    paused = not paused
+
+                if mode == "PVP":  # Ovládání hráče 2 jen v PVP
+                    if event.key == pygame.K_UP:
+                        geek2_keys['up'] = True
+                    if event.key == pygame.K_DOWN:
+                        geek2_keys['down'] = True
+
+            if event.type == pygame.KEYUP:  # Puštění klávesy
+                if event.key == pygame.K_w:
+                    geek1_keys['w'] = False
+                if event.key == pygame.K_s:
+                    geek1_keys['s'] = False
+                if mode == "PVP":
+                    if event.key == pygame.K_UP:
+                        geek2_keys['up'] = False
+                    if event.key == pygame.K_DOWN:
+                        geek2_keys['down'] = False
+
+        # Pokud není pauza, aktualizuj hru
+        if not paused:
+            # Výpočet pohybu hráče 1
+            if geek1_keys['w'] and not geek1_keys['s']:
+                geek1YFac = -1  # Nahoru
+            elif geek1_keys['s'] and not geek1_keys['w']:
+                geek1YFac = 1  # Dolů
+            else:
+                geek1YFac = 0  # Stůj
+
+            # Výpočet pohybu hráče 2
+            if mode == "PVP":  # PVP režim
+                if geek2_keys['up'] and not geek2_keys['down']:
+                    geek2YFac = -1
+                elif geek2_keys['down'] and not geek2_keys['up']:
+                    geek2YFac = 1
+                else:
+                    geek2YFac = 0
+            else:  # BOT režim
+                if ball.posy < geek2.posy + geek2.height // 2:
+                    geek2YFac = -1
+                elif ball.posy > geek2.posy + geek2.height // 2:
+                    geek2YFac = 1
+                else:
+                    geek2YFac = 0
+
+            # Detekce kolizí s pálkami
+            if ball.getRect().colliderect(geek1.getRect()):
+                ball.hit()
+                geek1Hits += 1  # Počítání hitů
+            if ball.getRect().colliderect(geek2.getRect()):
+                ball.hit()
+
+            # Aktualizace pozic
+            geek1.update(geek1YFac)
+            geek2.update(geek2YFac)
+            point = ball.update()
+
+            # Přidání skóre
+            if point == -1:
+                geek1Score += 1
+            elif point == 1:
+                geek2Score += 1
+            if point:
+                ball.reset()
+
+        # Vykreslení všeho
+        geek1.display()
+        geek2.display()
+        ball.display()
+
+        # Dolní status bar se skóre
+        pygame.draw.rect(screen, (25, 25, 25), (0, HEIGHT - 50, WIDTH, 50))
+        pygame.draw.line(screen, (60, 60, 60), (0, HEIGHT - 50), (WIDTH, HEIGHT - 50), 2)
+        screen.blit(font_small.render(f"{player_name}: {geek1Score}", True, WHITE), (20, HEIGHT - 35))
+        screen.blit(font_small.render(f"GEEK_2: {geek2Score}", True, WHITE), (WIDTH - 150, HEIGHT - 35))
+
+        # Pokud je pauza, zobraz text
+        if paused:
+            pause_text = font_large.render("PAUZA", True, WHITE)
+            screen.blit(pause_text, (WIDTH // 2 - pause_text.get_width() // 2, HEIGHT // 2 - 50))
+
+        pygame.display.update()  # Aktualizace obrazovky
+        clock.tick(FPS)  # 60 FPS
+
+
+# ===================================================================
+# SPUŠTĚNÍ HRY
+# ===================================================================
+if __name__ == "__main__":
+    # VYTVOŘENÍ TABULEK (nejdřív!)
+    create_tables()
+
+    while True:  # Nekonečná smyčka pro restart
+        mode, player_name = menu()  # Zobraz menu
+        main(mode, player_name)  # Spusť hru
