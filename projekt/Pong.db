@@ -1,4 +1,0 @@
-from db.models import create_tables
-
-create_tables()
-print("Databáze připravena")
