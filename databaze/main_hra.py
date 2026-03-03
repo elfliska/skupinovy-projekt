@@ -594,8 +594,18 @@ def menu():
         screen.blit(st, (start_button.x + (start_button.width  - st.get_width())  // 2,
                          start_button.y + (start_button.height - st.get_height()) // 2))
 
+        # --- Tlačítko HISTORIE ---
+        history_button = pygame.Rect(WIDTH // 2 - 110, 418, 220, 44)
+        hover_hist = history_button.collidepoint(mouse)
+        hc = BTN_MENU_HOVER if hover_hist else BTN_MENU_NORMAL
+        draw_neon_rect(screen, hc, history_button, radius=10, glow=hover_hist)
+        pygame.draw.rect(screen, COLOR_LINE, history_button, width=2, border_radius=10)
+        ht = font_medium.render("HISTORIE", True, CYAN)
+        screen.blit(ht, (history_button.x + (history_button.width  - ht.get_width())  // 2,
+                         history_button.y + (history_button.height - ht.get_height()) // 2))
+
         # --- Tlačítko UKONČIT ---
-        quit_button = pygame.Rect(WIDTH // 2 - 110, 420, 220, 46)
+        quit_button = pygame.Rect(WIDTH // 2 - 110, 476, 220, 44)
         hover_quit  = quit_button.collidepoint(mouse)                # Je myš nahoře?
         qc = (160, 20, 30) if hover_quit else (110, 15, 20)          # Barva záleží na hover
         draw_neon_rect(screen, qc, quit_button, radius=10, glow=hover_quit)
@@ -631,6 +641,8 @@ def menu():
                     mode = "BOT"
                 if start_button.collidepoint(event.pos) and player_name != "":
                     return mode, player_name   # Spusť hru - vrátíme data do volajícího kódu
+                if history_button.collidepoint(event.pos):
+                    show_history()   # Zobraz historii, po návratu jsme zpět v menu
                 if quit_button.collidepoint(event.pos):
                     pygame.quit()
                     quit()
@@ -696,6 +708,338 @@ def save_result(username, geek1Score, geek2Score, hits, game_mode, duration):
     conn.commit()
     conn.close()
     print(f"✅ Uloženo: {username} {geek1Score} : {geek2Score} {p2_name} | Vítěz: {winner_name} | Délka: {duration}s")
+
+
+# ===================================================================
+# FUNKCE HISTORY - Obrazovka s historií výsledků
+# ===================================================================
+def show_history():
+    """
+    Zobrazí přehled posledních her s filtry:
+      - rozbalovací seznam hráčů (dropdown)
+      - přepínač režimu: Vše / PVP / BOT
+    """
+
+    # ------------------------------------------------------------------
+    # Pomocné funkce pro kreslení
+    # ------------------------------------------------------------------
+    def draw_cell(text, x, w, y, color, align="l", fnt=None):
+        fnt = fnt or font_tiny
+        surf = fnt.render(str(text), True, color)
+        if align == "c":
+            bx = x + (w - surf.get_width()) // 2
+        elif align == "r":
+            bx = x + w - surf.get_width()
+        else:
+            bx = x
+        screen.blit(surf, (bx, y))
+
+    # ------------------------------------------------------------------
+    # Načteme všechny hráče z DB pro dropdown
+    # ------------------------------------------------------------------
+    def load_players():
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("SELECT username FROM player ORDER BY username")
+        names = [r[0] for r in cur.fetchall()]
+        conn.close()
+        return ["Všichni"] + names
+
+    # ------------------------------------------------------------------
+    # Dotaz na hry podle aktivních filtrů
+    # ------------------------------------------------------------------
+    def load_rows(player_filter, mode_filter):
+        conn = get_connection()
+        cur  = conn.cursor()
+
+        conditions = []
+        params     = []
+
+        if player_filter != "Všichni":
+            conditions.append("(p1.username = ? OR p2.username = ?)")
+            params += [player_filter, player_filter]
+
+        if mode_filter != "Vše":
+            conditions.append("g.game_mode = ?")
+            params.append(mode_filter)
+
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        cur.execute(f"""
+            SELECT
+                g.game_id,
+                g.played_at,
+                g.duration_seconds,
+                g.game_mode,
+                p1.username                    AS hrac1,
+                s1.points                      AS skore1,
+                s1.hits                        AS hity1,
+                p2.username                    AS hrac2,
+                s2.points                      AS skore2,
+                COALESCE(pw.username, 'Remíza') AS vitez
+            FROM game g
+            JOIN player  p1 ON p1.player_id = g.player1_id
+            JOIN player  p2 ON p2.player_id = g.player2_id
+            JOIN score   s1 ON s1.game_id   = g.game_id AND s1.player_id = g.player1_id
+            JOIN score   s2 ON s2.game_id   = g.game_id AND s2.player_id = g.player2_id
+            LEFT JOIN player pw ON pw.player_id = g.winner_player
+            {where}
+            ORDER BY g.played_at DESC
+            LIMIT 50
+        """, params)
+        data = cur.fetchall()
+        conn.close()
+        return data
+
+    # ------------------------------------------------------------------
+    # Počáteční stav
+    # ------------------------------------------------------------------
+    players       = load_players()          # ["Všichni", "hráč1", ...]
+    sel_player    = 0                        # index do players[]
+    mode_options  = ["Vše", "PVP", "BOT"]
+    sel_mode      = 0                        # index do mode_options[]
+    dropdown_open = False                    # je dropdown rozbalený?
+
+    rows      = load_rows(players[sel_player], mode_options[sel_mode])
+    scroll_y  = 0
+    ROW_HEIGHT = 48
+    FILTER_H   = 56    # výška pruhu s filtry
+    HEADER_H   = 56    # výška záhlaví sloupců  (pod filtry)
+    TABLE_TOP  = FILTER_H + HEADER_H + 4   # kde začínají datové řádky
+    TABLE_BOT  = HEIGHT - 62               # kde končí (nad tlačítkem ZPĚT)
+
+    def recalc_scroll():
+        return max(0, len(rows) * ROW_HEIGHT - (TABLE_BOT - TABLE_TOP))
+
+    max_scroll = recalc_scroll()
+
+    # ------------------------------------------------------------------
+    # UI prvky – pozice
+    # ------------------------------------------------------------------
+    back_button = pygame.Rect(WIDTH // 2 - 90, HEIGHT - 54, 180, 40)
+
+    # Dropdown hráče
+    DD_X, DD_Y, DD_W, DD_H = 16, 12, 200, 32
+    dd_rect = pygame.Rect(DD_X, DD_Y, DD_W, DD_H)
+
+    # Přepínače režimu (tři tlačítka vedle sebe)
+    MODE_X = DD_X + DD_W + 20
+    mode_rects = [pygame.Rect(MODE_X + i * 80, DD_Y, 74, DD_H) for i in range(3)]
+
+    # Záhlaví sloupců tabulky (x, šířka, zarovnání, popisek)
+    cols = [
+        ("#",       16,  30, "l"),
+        ("Datum",   54, 152, "l"),
+        ("Čas",    214,  50, "r"),
+        ("Režim",  276,  54, "l"),
+        ("Hráč 1", 342, 112, "l"),
+        ("Skóre",  462,  64, "c"),
+        ("Hráč 2", 534, 112, "l"),
+        ("Vítěz",  656, 230, "l"),
+    ]
+
+    running = True
+    while running:
+        screen.fill(COLOR_BG)
+        mouse = pygame.mouse.get_pos()
+
+        # ==============================================================
+        # PRUH S FILTRY (nahoře)
+        # ==============================================================
+        pygame.draw.rect(screen, COLOR_BAR, (0, 0, WIDTH, FILTER_H))
+        pygame.draw.line(screen, CYAN, (0, FILTER_H), (WIDTH, FILTER_H), 1)
+
+        # -- Popisek filtru hráče --
+        lbl = font_tiny.render("Hráč:", True, (120, 120, 180))
+        screen.blit(lbl, (DD_X, DD_Y - 2))   # nad dropdownem není místo → vlevo
+
+        # -- Dropdown box --
+        dd_hovered = dd_rect.collidepoint(mouse) and not dropdown_open
+        dd_bg = (40, 40, 80) if dd_hovered else (25, 25, 50)
+        pygame.draw.rect(screen, dd_bg, dd_rect, border_radius=6)
+        pygame.draw.rect(screen, CYAN, dd_rect, width=1, border_radius=6)
+        dd_txt = font_tiny.render(players[sel_player], True, WHITE)
+        screen.blit(dd_txt, (dd_rect.x + 8, dd_rect.y + 8))
+        # šipka dolů ▼
+        arrow = font_tiny.render("▼", True, CYAN)
+        screen.blit(arrow, (dd_rect.right - arrow.get_width() - 6, dd_rect.y + 8))
+
+        # -- Přepínače režimu --
+        for i, (mrect, mlabel) in enumerate(zip(mode_rects, mode_options)):
+            selected = (i == sel_mode)
+            bg  = (40, 40, 90) if selected else (20, 20, 40)
+            brd = CYAN if selected else COLOR_LINE
+            pygame.draw.rect(screen, bg, mrect, border_radius=6)
+            pygame.draw.rect(screen, brd, mrect, width=1, border_radius=6)
+            mc = CYAN if selected else (140, 140, 180)
+            mt = font_tiny.render(mlabel, True, mc)
+            screen.blit(mt, (mrect.x + (mrect.width - mt.get_width()) // 2,
+                             mrect.y + (mrect.height - mt.get_height()) // 2))
+
+        # Počet nalezených záznamů (vpravo v pruhu)
+        cnt = font_tiny.render(f"Nalezeno: {len(rows)}", True, (80, 80, 130))
+        screen.blit(cnt, (WIDTH - cnt.get_width() - 14, DD_Y + 8))
+
+        # ==============================================================
+        # ZÁHLAVÍ SLOUPCŮ
+        # ==============================================================
+        hdr_y = FILTER_H + 6
+        for label, x, w, align in cols:
+            draw_cell(label, x, w, hdr_y, (120, 120, 180), align)
+        pygame.draw.line(screen, COLOR_LINE,
+                         (0, FILTER_H + HEADER_H - 2),
+                         (WIDTH, FILTER_H + HEADER_H - 2), 1)
+
+        # ==============================================================
+        # TABULKA (ořezaná oblast)
+        # ==============================================================
+        clip_rect = pygame.Rect(0, TABLE_TOP, WIDTH, TABLE_BOT - TABLE_TOP)
+        screen.set_clip(clip_rect)
+
+        for i, r in enumerate(rows):
+            ry = TABLE_TOP + i * ROW_HEIGHT - scroll_y
+
+            row_bg = (16, 16, 28) if i % 2 == 0 else (20, 20, 36)
+            pygame.draw.rect(screen, row_bg, (0, ry, WIDTH, ROW_HEIGHT - 1))
+
+            if clip_rect.collidepoint(mouse) and ry <= mouse[1] < ry + ROW_HEIGHT:
+                pygame.draw.rect(screen, (30, 30, 60), (0, ry, WIDTH, ROW_HEIGHT - 1))
+
+            game_id, played_at, dur, mode_g, h1, s1, hits, h2, s2, win = r
+            datum = str(played_at)[:16] if played_at else "?"
+
+            vitez_color = GREEN if win == h1 else (YELLOW_NEON if win == "Remíza" else RED_NEON)
+
+            cy = ry + (ROW_HEIGHT - 16) // 2   # svislé středění
+
+            cell_data = [
+                (str(game_id),    cols[0][1], cols[0][2], cols[0][3], WHITE),
+                (datum,           cols[1][1], cols[1][2], cols[1][3], (150, 150, 195)),
+                (f"{dur}s",       cols[2][1], cols[2][2], cols[2][3], (120, 120, 165)),
+                (mode_g,          cols[3][1], cols[3][2], cols[3][3], CYAN),
+                (h1,              cols[4][1], cols[4][2], cols[4][3], GREEN),
+                (f"{s1} : {s2}",  cols[5][1], cols[5][2], cols[5][3], WHITE),
+                (h2,              cols[6][1], cols[6][2], cols[6][3], RED_NEON),
+                (win,             cols[7][1], cols[7][2], cols[7][3], vitez_color),
+            ]
+            for text, x, w, align, color in cell_data:
+                draw_cell(text, x, w, cy, color, align)
+
+        screen.set_clip(None)
+
+        # Oddělovač nad spodním panelem
+        pygame.draw.line(screen, COLOR_LINE, (0, TABLE_BOT + 2), (WIDTH, TABLE_BOT + 2), 1)
+
+        if not rows:
+            no_data = font_medium.render("Žádné výsledky.", True, (80, 80, 120))
+            screen.blit(no_data, (WIDTH // 2 - no_data.get_width() // 2,
+                                  (TABLE_TOP + TABLE_BOT) // 2 - 15))
+
+        # ==============================================================
+        # SCROLLBAR
+        # ==============================================================
+        if max_scroll > 0:
+            track_h = TABLE_BOT - TABLE_TOP
+            thumb_h = max(30, int(track_h * track_h / (track_h + max_scroll)))
+            thumb_y = TABLE_TOP + int(scroll_y / max_scroll * (track_h - thumb_h))
+            pygame.draw.rect(screen, (30, 30, 60), (WIDTH - 8, TABLE_TOP, 8, track_h))
+            pygame.draw.rect(screen, (80, 80, 140), (WIDTH - 7, thumb_y, 6, thumb_h), border_radius=3)
+
+        # ==============================================================
+        # TLAČÍTKO ZPĚT
+        # ==============================================================
+        draw_button(screen, back_button, "← ZPĚT", font_small,
+                    BTN_MENU_NORMAL, BTN_MENU_HOVER, mouse,
+                    text_color=CYAN, radius=10, border_color=COLOR_LINE)
+
+        # ==============================================================
+        # DROPDOWN SEZNAM (kreslíme jako poslední = přes vše ostatní)
+        # ==============================================================
+        if dropdown_open:
+            item_h  = 28
+            dd_list = pygame.Rect(DD_X, DD_Y + DD_H, DD_W, min(len(players), 10) * item_h)
+            pygame.draw.rect(screen, (20, 20, 45), dd_list, border_radius=4)
+            pygame.draw.rect(screen, CYAN, dd_list, width=1, border_radius=4)
+
+            for j, name in enumerate(players[:10]):   # max 10 položek bez scrollu
+                iy = DD_Y + DD_H + j * item_h
+                ir = pygame.Rect(DD_X, iy, DD_W, item_h)
+
+                item_hov = ir.collidepoint(mouse)
+                if j == sel_player:
+                    pygame.draw.rect(screen, (40, 40, 90), ir)
+                elif item_hov:
+                    pygame.draw.rect(screen, (30, 30, 70), ir)
+
+                ic = CYAN if j == sel_player else WHITE
+                it = font_tiny.render(name, True, ic)
+                screen.blit(it, (ir.x + 8, ir.y + (item_h - it.get_height()) // 2))
+
+        # ==============================================================
+        # UDÁLOSTI
+        # ==============================================================
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if dropdown_open:
+                        dropdown_open = False
+                    else:
+                        return
+                if not dropdown_open:
+                    if event.key == pygame.K_UP:
+                        scroll_y = max(0, scroll_y - ROW_HEIGHT)
+                    if event.key == pygame.K_DOWN:
+                        scroll_y = min(max_scroll, scroll_y + ROW_HEIGHT)
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                # Scrollování kolečkem
+                if event.button == 4:
+                    scroll_y = max(0, scroll_y - ROW_HEIGHT)
+                if event.button == 5:
+                    scroll_y = min(max_scroll, scroll_y + ROW_HEIGHT)
+
+                if event.button == 1:
+                    # Tlačítko ZPĚT
+                    if back_button.collidepoint(event.pos):
+                        return
+
+                    # Klik na dropdown box = otevřít / zavřít
+                    if dd_rect.collidepoint(event.pos):
+                        dropdown_open = not dropdown_open
+
+                    # Klik na položku v otevřeném dropdownu
+                    elif dropdown_open:
+                        item_h = 28
+                        for j, name in enumerate(players[:10]):
+                            ir = pygame.Rect(DD_X, DD_Y + DD_H + j * item_h, DD_W, item_h)
+                            if ir.collidepoint(event.pos):
+                                sel_player    = j
+                                dropdown_open = False
+                                rows          = load_rows(players[sel_player],
+                                                          mode_options[sel_mode])
+                                scroll_y      = 0
+                                max_scroll    = recalc_scroll()
+                                break
+                        else:
+                            dropdown_open = False  # klik mimo = zavřít
+
+                    # Přepínače režimu
+                    else:
+                        for i, mrect in enumerate(mode_rects):
+                            if mrect.collidepoint(event.pos):
+                                sel_mode   = i
+                                rows       = load_rows(players[sel_player],
+                                                       mode_options[sel_mode])
+                                scroll_y   = 0
+                                max_scroll = recalc_scroll()
+                                break
+
+        pygame.display.update()
+        clock.tick(FPS)
 
 
 # ===================================================================
